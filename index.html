@@ -70,7 +70,8 @@
     <div class="grid">
       <label class="field"><b>世帯の手取り年収</b><input type="number" id="incomeAnnual" value="700"> <span class="unit">万円/年(税・社会保険料を引いた後)</span></label>
       <label class="field"><b>昇給率(年)</b><input type="number" id="incomeGrowth" value="1" step="0.1"> <span class="unit">%/年</span></label>
-      <label class="field"><b>現在の貯蓄・投資額の合計</b><input type="number" id="savings" value="1500"> <span class="unit">万円</span></label>
+      <label class="field"><b>現金・預金</b><input type="number" id="cashSavings" value="500"> <span class="unit">万円(利息0%として扱う。生活防衛資金)</span></label>
+      <label class="field"><b>投資額(株式・投信など)</b><input type="number" id="investments" value="1000"> <span class="unit">万円(この部分にだけリターンがかかる)</span></label>
       <label class="field"><b>退職金(FIRE時に受取と仮定)</b><input type="number" id="retirementBonus" value="500"> <span class="unit">万円 ※早期退職だと減る点に注意</span></label>
       <label class="field"><b>FIRE後の年収(パート・副業等)</b><input type="number" id="postFireIncome" value="0"> <span class="unit">万円/年(完全リタイアなら0)</span></label>
     </div>
@@ -135,6 +136,7 @@
       <h2>⚠️ このシミュレーションの前提と注意点</h2>
       <ul class="notes">
         <li>リターンは<b>税引き後</b>として扱っています。NISA枠を超える課税口座では運用益に約20%課税されるため、実際は少し不利になります。</li>
+        <li><b>現金と投資は別勘定</b>です。リターン(暴落テストの下落も)は投資部分にだけかかり、現金は利息0%で据え置きです。毎年の黒字は全額投資に回し、赤字は投資から取り崩し、投資が尽きたら現金を使う、というルールで計算しています。</li>
         <li>FIRE後も同じリターンで運用し続ける前提です。特に<b>10%は歴史的に見てもかなり楽観的</b>です。5%の結果と暴落テストの列を基準に考えるのが安全です。</li>
         <li><b>暴落テスト⚡の列</b>は「FIREしたまさにその年に、想定した割合の暴落が直撃しても寿命まで資産がもつ年齢」です。取り崩し初期の暴落(シークエンスリスク)への耐性の目安になります。</li>
         <li><b>年金の自動減額</b>は「厚生年金の報酬比例部分が加入年数(就職年齢〜退職年齢)に比例する」という近似です。基礎年金(月約6.9万円)はFIRE後も国民年金を払い続ける前提で満額としています。正確な額はねんきんネットで試算してください。</li>
@@ -191,7 +193,7 @@ function adjustPension(inputMonthly, careerYears, fullCareerYears) {
 // quitAge歳になった年から給与収入ゼロ、として寿命まで資産が持つかを1年ずつ計算
 // crash=true なら FIREした年に crashRate の暴落が直撃する想定
 function simulate(p, r, quitAge, crash) {
-  let assets = p.savings;
+  let invest = p.investments, cash = p.cashSavings;
   const rows = [];
   let ok = true;
 
@@ -243,9 +245,12 @@ function simulate(p, r, quitAge, crash) {
     }
     const expenses = living + other + edu + social + loanPay;
 
-    assets = assets * (1 + yearReturn) + income + pension - expenses;
-    rows.push({ age, income, pension, edu, loanPay, expenses, assets });
-    if (assets < 0) { ok = false; break; }
+    // リターン(暴落含む)は投資部分にだけかかる。黒字は投資へ、赤字は投資から取り崩し
+    invest = invest * (1 + yearReturn) + income + pension - expenses;
+    if (invest < 0) { cash += invest; invest = 0; } // 投資が尽きたら現金から
+    const assets = invest + cash;
+    rows.push({ age, income, pension, edu, loanPay, expenses, invest, cash, assets });
+    if (cash < 0) { ok = false; break; }
   }
   return { ok, rows };
 }
@@ -313,7 +318,8 @@ function readParams() {
     lifeEnd: num('lifeEnd'),
     incomeAnnual: num('incomeAnnual'),
     incomeGrowth: num('incomeGrowth') / 100,
-    savings: num('savings'),
+    cashSavings: num('cashSavings'),
+    investments: num('investments'),
     retirementBonus: num('retirementBonus'),
     postFireIncome: num('postFireIncome'),
     livingMonthly: num('livingMonthly'),
@@ -411,7 +417,7 @@ function drawChart(p) {
   for (const res of lastResults) {
     ctx.strokeStyle = res.color; ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(x(p.selfAge), y(Math.max(0, p.savings)));
+    ctx.moveTo(x(p.selfAge), y(Math.max(0, p.cashSavings + p.investments)));
     for (const row of res.rows) ctx.lineTo(x(row.age), y(Math.max(0, row.assets)));
     ctx.stroke();
     if (res.fireAge !== null) {
@@ -439,13 +445,14 @@ function renderDetail(idx) {
     tabs.appendChild(b);
   });
   const res = lastResults[idx];
-  let html = `<tr><th>年齢</th><th>収入(手取)</th><th>年金</th><th>支出合計</th><th>うち教育費</th><th>うちローン返済</th><th>年末の資産</th></tr>`;
+  let html = `<tr><th>年齢</th><th>収入(手取)</th><th>年金</th><th>支出合計</th><th>うち教育費</th><th>うちローン返済</th><th>資産合計</th><th>うち投資</th><th>うち現金</th></tr>`;
   for (const row of res.rows) {
     const cls = row.age === res.fireAge ? ' class="fire-row"' : '';
     html += `<tr${cls}><td>${row.age}歳${row.age === res.fireAge ? ' 🔥' : ''}</td>
       <td>${fmt(row.income)}</td><td>${fmt(row.pension)}</td>
       <td>${fmt(row.expenses)}</td><td>${fmt(row.edu)}</td><td>${fmt(row.loanPay || 0)}</td>
-      <td${row.assets < 0 ? ' class="ng"' : ''}>${fmt(row.assets)}</td></tr>`;
+      <td${row.assets < 0 ? ' class="ng"' : ''}>${fmt(row.assets)}</td>
+      <td>${fmt(row.invest)}</td><td${row.cash < 0 ? ' class="ng"' : ''}>${fmt(row.cash)}</td></tr>`;
   }
   document.getElementById('detailTable').innerHTML = html;
 }
