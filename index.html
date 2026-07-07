@@ -79,10 +79,13 @@
   <div class="card">
     <h2>🏠 支出</h2>
     <div class="grid">
-      <label class="field"><b>月の生活費</b><input type="number" id="livingMonthly" value="30"> <span class="unit">万円/月(住居費込み・教育費は除く)</span></label>
+      <label class="field"><b>月の生活費</b><input type="number" id="livingMonthly" value="30"> <span class="unit">万円/月(家賃・管理費は含む。教育費・ローン返済は除く)</span></label>
       <label class="field"><b>その他の年間コスト</b><input type="number" id="otherAnnual" value="60"> <span class="unit">万円/年(保険・旅行・車検・帰省など)</span></label>
       <label class="field"><b>FIRE後の生活費(現在比)</b><input type="number" id="postFireRatio" value="90"> <span class="unit">%(仕事関連費が減る分など)</span></label>
       <label class="field"><b>インフレ率(年)</b><input type="number" id="inflation" value="1" step="0.1"> <span class="unit">%/年(生活費・教育費に適用)</span></label>
+      <label class="field"><b>住宅ローン残高</b><input type="number" id="loanBalance" value="0"> <span class="unit">万円(なければ0)</span></label>
+      <label class="field"><b>ローン利率(年)</b><input type="number" id="loanRate" value="1" step="0.01"> <span class="unit">%/年</span></label>
+      <label class="field"><b>ローン残り返済年数</b><input type="number" id="loanYears" value="25"> <span class="unit">年(元利均等で毎年の返済額を自動計算)</span></label>
     </div>
   </div>
 
@@ -139,7 +142,8 @@
         <li>退職金はFIREした年に満額受け取る前提です。早期退職では大きく減額されるのが普通なので、少なめに入力してください。</li>
         <li>教育費は文科省「子供の学習費調査」等をもとにした年間概算です(大学の入学金・受験費用は含まれるおおよその平均値)。児童手当(月1〜1.5万円)は収入に含めていません。</li>
         <li>年金額はインフレに連動して増える前提です(実際はマクロ経済スライドで目減りする可能性があります)。</li>
-        <li>住宅ローン残債・リフォーム・車の買い替え・介護費用は含みません。必要なら「その他の年間コスト」に年平均で上乗せしてください(例: 車300万を10年ごと→+30万/年)。</li>
+        <li><b>住宅ローン</b>は元利均等返済(毎年同額)で計算し、返済額はインフレ調整しません。ボーナス払い・変動金利の見直し・繰上げ返済は考慮していないので、正確な返済額は返済予定表で確認してください。</li>
+        <li>リフォーム・車の買い替え・介護費用は含みません。必要なら「その他の年間コスト」に年平均で上乗せしてください(例: 車300万を10年ごと→+30万/年)。</li>
       </ul>
     </div>
   </div>
@@ -166,6 +170,14 @@ function eduCostAt(child, childAge) {
   return 0;
 }
 
+// 元利均等返済の年間返済額(万円): 残高B・年利r・残りn年
+function loanAnnualPayment(B, r, n) {
+  if (B <= 0) return 0;
+  n = Math.max(1, n);
+  if (r <= 0) return B / n;
+  return B * r / (1 - Math.pow(1 + r, -n));
+}
+
 const PENSION_BASE = 6.9; // 老齢基礎年金の満額めやす(万円/月)
 
 // 早期退職による厚生年金の減額: 報酬比例部分が加入年数に比例する近似
@@ -182,6 +194,10 @@ function simulate(p, r, quitAge, crash) {
   let assets = p.savings;
   const rows = [];
   let ok = true;
+
+  // 住宅ローン(返済額は固定のためインフレ調整しない)
+  let loanBal = p.loanBalance;
+  const loanPayFull = loanAnnualPayment(p.loanBalance, p.loanRate, p.loanYears);
 
   // 早期退職で厚生年金の加入年数が短くなる分を年金額に反映
   let pSelf = p.pensionSelf, pSpouse = p.pensionSpouse;
@@ -217,10 +233,18 @@ function simulate(p, r, quitAge, crash) {
     const social = age >= quitAge ? p.socialInsurance * infl : 0;
     let edu = 0;
     for (const c of p.children) edu += eduCostAt(c, c.age + t) * infl;
-    const expenses = living + other + edu + social;
+
+    let loanPay = 0;
+    if (loanBal > 0) {
+      const withInterest = loanBal * (1 + p.loanRate);
+      loanPay = Math.min(loanPayFull, withInterest); // 最終年は残額だけ払う
+      loanBal = withInterest - loanPay;
+      if (loanBal < 0.01) loanBal = 0;
+    }
+    const expenses = living + other + edu + social + loanPay;
 
     assets = assets * (1 + yearReturn) + income + pension - expenses;
-    rows.push({ age, income, pension, edu, expenses, assets });
+    rows.push({ age, income, pension, edu, loanPay, expenses, assets });
     if (assets < 0) { ok = false; break; }
   }
   return { ok, rows };
@@ -303,6 +327,9 @@ function readParams() {
     pensionAdjust: document.getElementById('pensionAdjust').checked,
     crashRate: num('crashRate') / 100,
     socialInsurance: num('socialInsurance'),
+    loanBalance: num('loanBalance'),
+    loanRate: num('loanRate') / 100,
+    loanYears: num('loanYears'),
     children
   };
 }
@@ -412,12 +439,12 @@ function renderDetail(idx) {
     tabs.appendChild(b);
   });
   const res = lastResults[idx];
-  let html = `<tr><th>年齢</th><th>収入(手取)</th><th>年金</th><th>支出合計</th><th>うち教育費</th><th>年末の資産</th></tr>`;
+  let html = `<tr><th>年齢</th><th>収入(手取)</th><th>年金</th><th>支出合計</th><th>うち教育費</th><th>うちローン返済</th><th>年末の資産</th></tr>`;
   for (const row of res.rows) {
     const cls = row.age === res.fireAge ? ' class="fire-row"' : '';
     html += `<tr${cls}><td>${row.age}歳${row.age === res.fireAge ? ' 🔥' : ''}</td>
       <td>${fmt(row.income)}</td><td>${fmt(row.pension)}</td>
-      <td>${fmt(row.expenses)}</td><td>${fmt(row.edu)}</td>
+      <td>${fmt(row.expenses)}</td><td>${fmt(row.edu)}</td><td>${fmt(row.loanPay || 0)}</td>
       <td${row.assets < 0 ? ' class="ng"' : ''}>${fmt(row.assets)}</td></tr>`;
   }
   document.getElementById('detailTable').innerHTML = html;
