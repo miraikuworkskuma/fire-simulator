@@ -54,14 +54,13 @@
 <body>
 <div class="wrap">
   <h1>🔥 FIREシミュレーター</h1>
-  <p class="lead">家計の情報を入力して「計算する」を押すと、投資リターン5%・7%・10%それぞれで<b>何歳でFIRE(早期リタイア)できるか</b>を比較します。FIRE可能の判定は「その歳で仕事を辞めても、想定寿命まで資産が尽きないこと」です。金額はすべて<b>万円</b>単位で入力してください。</p>
+  <p class="lead">家計の情報を入力して「計算する」を押すと、投資リターン5%・7%・10%それぞれで<b>何歳でFIRE(早期リタイア)できるか</b>を比較します。FIRE可能の判定は「その歳で仕事を辞めても、<b>95歳まで資産が尽きないこと</b>」です。金額はすべて<b>万円</b>単位で入力してください。単身の方は配偶者の欄を空欄のままにすればOKです。</p>
 
   <div class="card">
     <h2>👨‍👩‍👧 家族の年齢</h2>
     <div class="grid">
       <label class="field"><b>本人の年齢</b><input type="number" id="selfAge" value="40"> <span class="unit">歳(この人の年齢を基準に計算)</span></label>
-      <label class="field"><b>配偶者の年齢</b><input type="number" id="spouseAge" value="38"> <span class="unit">歳(いない場合は空欄)</span></label>
-      <label class="field"><b>想定寿命(資産がもつべき年齢)</b><input type="number" id="lifeEnd" value="95"> <span class="unit">歳</span></label>
+      <label class="field"><b>配偶者の年齢</b><input type="number" id="spouseAge" value="38"> <span class="unit">歳(単身の方は空欄に)</span></label>
     </div>
   </div>
 
@@ -92,6 +91,7 @@
 
   <div class="card">
     <h2>🎓 子供と教育費(文科省調査ベースの概算を自動計算)</h2>
+    <p class="lead" style="margin-top:0">お子さんがいる場合は1人ずつ追加してください。いない場合はこのままでOKです。</p>
     <div id="children"></div>
     <button class="btn-add" onclick="addChild()">+ 子供を追加</button>
   </div>
@@ -100,7 +100,7 @@
     <h2>👴 老後の収入(年金)</h2>
     <div class="grid">
       <label class="field"><b>本人の年金(月額見込み)</b><input type="number" id="pensionSelf" value="14"> <span class="unit">万円/月(ねんきん定期便の「60歳まで働いた場合」の見込み額)</span></label>
-      <label class="field"><b>配偶者の年金(月額見込み)</b><input type="number" id="pensionSpouse" value="7"> <span class="unit">万円/月(同上)</span></label>
+      <label class="field"><b>配偶者の年金(月額見込み)</b><input type="number" id="pensionSpouse" value="7"> <span class="unit">万円/月(同上。単身の方は無視されます)</span></label>
       <label class="field"><b>受給開始年齢</b><input type="number" id="pensionStart" value="65"> <span class="unit">歳(それぞれ自分の年齢で開始)</span></label>
       <label class="field"><b>就職した年齢</b><input type="number" id="startWorkAge" value="22"> <span class="unit">歳(厚生年金の加入年数の計算に使用)</span></label>
       <label class="field"><b>早期退職による年金減額を自動計算</b><input type="checkbox" id="pensionAdjust" checked style="width:18px;height:18px;vertical-align:middle"> <span class="unit">FIREが早いほど厚生年金が減る効果を反映</span></label>
@@ -112,7 +112,7 @@
     <div class="grid">
       <label class="field"><b>自由設定リターン</b><input type="number" id="customRate" value="4" step="0.1"> <span class="unit">%/年(5・7・10%に加えて比較する4本目)</span></label>
       <label class="field"><b>暴落ストレステスト</b><input type="number" id="crashRate" value="30"> <span class="unit">%(FIREした年にこの割合の暴落が直撃する想定)</span></label>
-      <label class="field"><b>FIRE後の社会保険料</b><input type="number" id="socialInsurance" value="70"> <span class="unit">万円/年(国民健康保険+国民年金の世帯合計)</span></label>
+      <label class="field"><b>FIRE後の社会保険料</b><input type="number" id="socialInsurance" value="70"> <span class="unit">万円/年(国保+国民年金。夫婦70・単身35が目安)</span></label>
     </div>
   </div>
 
@@ -138,7 +138,7 @@
         <li>リターンは<b>税引き後</b>として扱っています。NISA枠を超える課税口座では運用益に約20%課税されるため、実際は少し不利になります。</li>
         <li><b>現金と投資は別勘定</b>です。リターン(暴落テストの下落も)は投資部分にだけかかり、現金は利息0%で据え置きです。毎年の黒字は全額投資に回し、赤字は投資から取り崩し、投資が尽きたら現金を使う、というルールで計算しています。</li>
         <li>FIRE後も同じリターンで運用し続ける前提です。特に<b>10%は歴史的に見てもかなり楽観的</b>です。5%の結果と暴落テストの列を基準に考えるのが安全です。</li>
-        <li><b>暴落テスト⚡の列</b>は「FIREしたまさにその年に、想定した割合の暴落が直撃しても寿命まで資産がもつ年齢」です。取り崩し初期の暴落(シークエンスリスク)への耐性の目安になります。</li>
+        <li><b>暴落テスト⚡の列</b>は「FIREしたまさにその年に、想定した割合の暴落が直撃しても95歳まで資産がもつ年齢」です。取り崩し初期の暴落(シークエンスリスク)への耐性の目安になります。</li>
         <li><b>年金の自動減額</b>は「厚生年金の報酬比例部分が加入年数(就職年齢〜退職年齢)に比例する」という近似です。基礎年金(月約6.9万円)はFIRE後も国民年金を払い続ける前提で満額としています。正確な額はねんきんネットで試算してください。</li>
         <li><b>FIRE後の社会保険料</b>はFIRE後ずっと一定(インフレ調整のみ)としています。実際は60歳以降は国民年金の支払いが終わるためやや保守的(安全側)の見積もりです。</li>
         <li>退職金はFIREした年に満額受け取る前提です。早期退職では大きく減額されるのが普通なので、少なめに入力してください。</li>
@@ -315,7 +315,8 @@ function readParams() {
   return {
     selfAge: num('selfAge'),
     spouseAge: spouseRaw === '' ? null : parseFloat(spouseRaw),
-    lifeEnd: num('lifeEnd'),
+    lifeEnd: 95, // 95歳まで資産がもつことをFIRE可能の条件とする
+
     incomeAnnual: num('incomeAnnual'),
     incomeGrowth: num('incomeGrowth') / 100,
     cashSavings: num('cashSavings'),
@@ -457,7 +458,6 @@ function renderDetail(idx) {
   document.getElementById('detailTable').innerHTML = html;
 }
 
-addChild(5);
 window.addChild = addChild;
 window.calc = calc;
 }
