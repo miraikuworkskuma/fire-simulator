@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIREシミュレーター(リターン5%・7%・10%比較)</title>
+<style>
+  :root {
+    --blue: #2563eb; --green: #16a34a; --red: #dc2626;
+    --bg: #f5f7fa; --card: #ffffff; --border: #e2e8f0; --text: #1e293b; --sub: #64748b;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--sub); font-size: 13px; margin-bottom: 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--bg); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  label.field { display: block; font-size: 12px; color: var(--sub); }
+  label.field b { display: block; margin-bottom: 4px; color: var(--text); font-size: 12.5px; }
+  input[type=number], select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: #fff; }
+  .unit { font-size: 11px; color: var(--sub); }
+  .child-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; padding: 10px; border: 1px dashed var(--border); border-radius: 10px; margin-bottom: 8px; }
+  .child-row .field { width: 110px; }
+  .child-row .field.wide { width: 140px; }
+  button { cursor: pointer; border: none; border-radius: 8px; font-size: 14px; }
+  .btn-add { background: #e0e7ff; color: #3730a3; padding: 8px 14px; }
+  .btn-del { background: #fee2e2; color: #991b1b; padding: 7px 10px; font-size: 12px; }
+  .btn-calc { background: var(--blue); color: #fff; padding: 14px 0; width: 100%; font-size: 17px; font-weight: bold; border-radius: 10px; }
+  .btn-calc:hover { background: #1d4ed8; }
+  table.result { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.result th, table.result td { padding: 10px 8px; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.result th { background: var(--bg); font-size: 12.5px; }
+  .table-scroll { overflow-x: auto; }
+  .rate-tag { display: inline-block; padding: 2px 10px; border-radius: 99px; color: #fff; font-weight: bold; font-size: 13px; }
+  .big { font-size: 20px; font-weight: bold; }
+  .ng { color: var(--red); font-weight: bold; }
+  canvas { width: 100%; height: auto; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button { padding: 6px 16px; border-radius: 8px; background: var(--bg); color: var(--sub); font-weight: bold; }
+  .tabs button.on { background: var(--blue); color: #fff; }
+  .detail-scroll { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table.detail { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.detail th, table.detail td { padding: 5px 8px; text-align: right; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+  table.detail th { position: sticky; top: 0; background: var(--bg); }
+  table.detail td:first-child, table.detail th:first-child { text-align: center; }
+  .fire-row { background: #fef9c3; }
+  .notes { font-size: 12px; color: var(--sub); line-height: 1.8; }
+  .notes li { margin-bottom: 2px; }
+  #resultArea { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔥 FIREシミュレーター</h1>
+  <p class="lead">家計の情報を入力して「計算する」を押すと、投資リターン5%・7%・10%それぞれで<b>何歳でFIRE(早期リタイア)できるか</b>を比較します。FIRE可能の判定は「その歳で仕事を辞めても、想定寿命まで資産が尽きないこと」です。金額はすべて<b>万円</b>単位で入力してください。</p>
+
+  <div class="card">
+    <h2>👨‍👩‍👧 家族の年齢</h2>
+    <div class="grid">
+      <label class="field"><b>本人の年齢</b><input type="number" id="selfAge" value="40"> <span class="unit">歳(この人の年齢を基準に計算)</span></label>
+      <label class="field"><b>配偶者の年齢</b><input type="number" id="spouseAge" value="38"> <span class="unit">歳(いない場合は空欄)</span></label>
+      <label class="field"><b>想定寿命(資産がもつべき年齢)</b><input type="number" id="lifeEnd" value="95"> <span class="unit">歳</span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>💰 収入と資産</h2>
+    <div class="grid">
+      <label class="field"><b>世帯の手取り年収</b><input type="number" id="incomeAnnual" value="700"> <span class="unit">万円/年(税・社会保険料を引いた後)</span></label>
+      <label class="field"><b>昇給率(年)</b><input type="number" id="incomeGrowth" value="1" step="0.1"> <span class="unit">%/年</span></label>
+      <label class="field"><b>現在の貯蓄・投資額の合計</b><input type="number" id="savings" value="1500"> <span class="unit">万円</span></label>
+      <label class="field"><b>退職金(FIRE時に受取と仮定)</b><input type="number" id="retirementBonus" value="500"> <span class="unit">万円 ※早期退職だと減る点に注意</span></label>
+      <label class="field"><b>FIRE後の年収(パート・副業等)</b><input type="number" id="postFireIncome" value="0"> <span class="unit">万円/年(完全リタイアなら0)</span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🏠 支出</h2>
+    <div class="grid">
+      <label class="field"><b>月の生活費</b><input type="number" id="livingMonthly" value="30"> <span class="unit">万円/月(住居費込み・教育費は除く)</span></label>
+      <label class="field"><b>その他の年間コスト</b><input type="number" id="otherAnnual" value="60"> <span class="unit">万円/年(保険・旅行・車検・帰省など)</span></label>
+      <label class="field"><b>FIRE後の生活費(現在比)</b><input type="number" id="postFireRatio" value="90"> <span class="unit">%(仕事関連費が減る分など)</span></label>
+      <label class="field"><b>インフレ率(年)</b><input type="number" id="inflation" value="1" step="0.1"> <span class="unit">%/年(生活費・教育費に適用)</span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🎓 子供と教育費(文科省調査ベースの概算を自動計算)</h2>
+    <div id="children"></div>
+    <button class="btn-add" onclick="addChild()">+ 子供を追加</button>
+  </div>
+
+  <div class="card">
+    <h2>👴 老後の収入(年金)</h2>
+    <div class="grid">
+      <label class="field"><b>本人の年金(月額見込み)</b><input type="number" id="pensionSelf" value="14"> <span class="unit">万円/月(ねんきん定期便の「60歳まで働いた場合」の見込み額)</span></label>
+      <label class="field"><b>配偶者の年金(月額見込み)</b><input type="number" id="pensionSpouse" value="7"> <span class="unit">万円/月(同上)</span></label>
+      <label class="field"><b>受給開始年齢</b><input type="number" id="pensionStart" value="65"> <span class="unit">歳(それぞれ自分の年齢で開始)</span></label>
+      <label class="field"><b>就職した年齢</b><input type="number" id="startWorkAge" value="22"> <span class="unit">歳(厚生年金の加入年数の計算に使用)</span></label>
+      <label class="field"><b>早期退職による年金減額を自動計算</b><input type="checkbox" id="pensionAdjust" checked style="width:18px;height:18px;vertical-align:middle"> <span class="unit">FIREが早いほど厚生年金が減る効果を反映</span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ シミュレーション設定</h2>
+    <div class="grid">
+      <label class="field"><b>自由設定リターン</b><input type="number" id="customRate" value="4" step="0.1"> <span class="unit">%/年(5・7・10%に加えて比較する4本目)</span></label>
+      <label class="field"><b>暴落ストレステスト</b><input type="number" id="crashRate" value="30"> <span class="unit">%(FIREした年にこの割合の暴落が直撃する想定)</span></label>
+      <label class="field"><b>FIRE後の社会保険料</b><input type="number" id="socialInsurance" value="70"> <span class="unit">万円/年(国民健康保険+国民年金の世帯合計)</span></label>
+    </div>
+  </div>
+
+  <button class="btn-calc" onclick="calc()">📊 計算する</button>
+
+  <div id="resultArea">
+    <div class="card">
+      <h2>📋 リターン別 FIRE可能年齢の比較</h2>
+      <div class="table-scroll"><table class="result" id="compareTable"></table></div>
+    </div>
+    <div class="card">
+      <h2>📈 資産推移(各シナリオの最速FIREプラン)</h2>
+      <canvas id="chart" width="940" height="380"></canvas>
+    </div>
+    <div class="card">
+      <h2>📅 年ごとの詳細(黄色の行 = FIREする年)</h2>
+      <div class="tabs" id="tabs"></div>
+      <div class="detail-scroll"><table class="detail" id="detailTable"></table></div>
+    </div>
+    <div class="card">
+      <h2>⚠️ このシミュレーションの前提と注意点</h2>
+      <ul class="notes">
+        <li>リターンは<b>税引き後</b>として扱っています。NISA枠を超える課税口座では運用益に約20%課税されるため、実際は少し不利になります。</li>
+        <li>FIRE後も同じリターンで運用し続ける前提です。特に<b>10%は歴史的に見てもかなり楽観的</b>です。5%の結果と暴落テストの列を基準に考えるのが安全です。</li>
+        <li><b>暴落テスト⚡の列</b>は「FIREしたまさにその年に、想定した割合の暴落が直撃しても寿命まで資産がもつ年齢」です。取り崩し初期の暴落(シークエンスリスク)への耐性の目安になります。</li>
+        <li><b>年金の自動減額</b>は「厚生年金の報酬比例部分が加入年数(就職年齢〜退職年齢)に比例する」という近似です。基礎年金(月約6.9万円)はFIRE後も国民年金を払い続ける前提で満額としています。正確な額はねんきんネットで試算してください。</li>
+        <li><b>FIRE後の社会保険料</b>はFIRE後ずっと一定(インフレ調整のみ)としています。実際は60歳以降は国民年金の支払いが終わるためやや保守的(安全側)の見積もりです。</li>
+        <li>退職金はFIREした年に満額受け取る前提です。早期退職では大きく減額されるのが普通なので、少なめに入力してください。</li>
+        <li>教育費は文科省「子供の学習費調査」等をもとにした年間概算です(大学の入学金・受験費用は含まれるおおよその平均値)。児童手当(月1〜1.5万円)は収入に含めていません。</li>
+        <li>年金額はインフレに連動して増える前提です(実際はマクロ経済スライドで目減りする可能性があります)。</li>
+        <li>住宅ローン残債・リフォーム・車の買い替え・介護費用は含みません。必要なら「その他の年間コスト」に年平均で上乗せしてください(例: 車300万を10年ごと→+30万/年)。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== PURE =====
+// 教育費の年間概算(万円)
+const EDU = {
+  elem: { pub: 35, pri: 167 },
+  jhs:  { pub: 54, pri: 144 },
+  hs:   { pub: 51, pri: 105 },
+  uni:  { none: 0, natl: 65, priBun: 105, priRi: 135 }
+};
+const AWAY_COST = 110; // 大学で自宅外の場合の追加(仕送り・家賃)万円/年
+
+function eduCostAt(child, childAge) {
+  if (childAge >= 6 && childAge <= 11) return EDU.elem[child.elem];
+  if (childAge >= 12 && childAge <= 14) return EDU.jhs[child.jhs];
+  if (childAge >= 15 && childAge <= 17) return EDU.hs[child.hs];
+  if (childAge >= 18 && childAge <= 21 && child.uni !== 'none') {
+    return EDU.uni[child.uni] + (child.away ? AWAY_COST : 0);
+  }
+  return 0;
+}
+
+const PENSION_BASE = 6.9; // 老齢基礎年金の満額めやす(万円/月)
+
+// 早期退職による厚生年金の減額: 報酬比例部分が加入年数に比例する近似
+function adjustPension(inputMonthly, careerYears, fullCareerYears) {
+  const base = Math.min(inputMonthly, PENSION_BASE);
+  const prop = Math.max(0, inputMonthly - PENSION_BASE);
+  const ratio = fullCareerYears > 0 ? Math.min(1, Math.max(0, careerYears) / fullCareerYears) : 1;
+  return base + prop * ratio;
+}
+
+// quitAge歳になった年から給与収入ゼロ、として寿命まで資産が持つかを1年ずつ計算
+// crash=true なら FIREした年に crashRate の暴落が直撃する想定
+function simulate(p, r, quitAge, crash) {
+  let assets = p.savings;
+  const rows = [];
+  let ok = true;
+
+  // 早期退職で厚生年金の加入年数が短くなる分を年金額に反映
+  let pSelf = p.pensionSelf, pSpouse = p.pensionSpouse;
+  if (p.pensionAdjust) {
+    const fullYears = 60 - p.startWorkAge;
+    pSelf = adjustPension(p.pensionSelf, quitAge - p.startWorkAge, fullYears);
+    if (p.spouseAge !== null) {
+      const spouseQuitAge = p.spouseAge + (quitAge - p.selfAge);
+      pSpouse = adjustPension(p.pensionSpouse, spouseQuitAge - p.startWorkAge, fullYears);
+    }
+  }
+
+  for (let age = p.selfAge; age <= p.lifeEnd; age++) {
+    const t = age - p.selfAge;
+    const infl = Math.pow(1 + p.inflation, t);
+    const yearReturn = (crash && age === quitAge) ? -p.crashRate : r;
+
+    let income = 0;
+    if (age < quitAge) income = p.incomeAnnual * Math.pow(1 + p.incomeGrowth, t);
+    else income = p.postFireIncome * infl;
+    if (age === quitAge) income += p.retirementBonus;
+
+    let pension = 0;
+    if (age >= p.pensionStart) pension += pSelf * 12 * infl;
+    if (p.spouseAge !== null) {
+      const spAge = p.spouseAge + t;
+      if (spAge >= p.pensionStart) pension += pSpouse * 12 * infl;
+    }
+
+    const ratio = age < quitAge ? 1 : p.postFireRatio;
+    const living = p.livingMonthly * 12 * ratio * infl;
+    const other = p.otherAnnual * infl;
+    const social = age >= quitAge ? p.socialInsurance * infl : 0;
+    let edu = 0;
+    for (const c of p.children) edu += eduCostAt(c, c.age + t) * infl;
+    const expenses = living + other + edu + social;
+
+    assets = assets * (1 + yearReturn) + income + pension - expenses;
+    rows.push({ age, income, pension, edu, expenses, assets });
+    if (assets < 0) { ok = false; break; }
+  }
+  return { ok, rows };
+}
+
+function findFireAge(p, r, crash) {
+  for (let quitAge = p.selfAge; quitAge <= p.lifeEnd; quitAge++) {
+    const res = simulate(p, r, quitAge, crash);
+    if (res.ok) return { fireAge: quitAge, rows: res.rows };
+  }
+  return { fireAge: null, rows: simulate(p, r, p.lifeEnd + 1, crash).rows };
+}
+// ===== DOM =====
+if (typeof document !== 'undefined') {
+
+function buildRates() {
+  const rates = [
+    { r: 0.05, label: '5%', color: '#2563eb' },
+    { r: 0.07, label: '7%', color: '#16a34a' },
+    { r: 0.10, label: '10%', color: '#dc2626' }
+  ];
+  const cv = parseFloat(document.getElementById('customRate').value);
+  if (!isNaN(cv) && cv !== 0 && !rates.some(x => Math.abs(x.r - cv / 100) < 1e-9)) {
+    rates.push({ r: cv / 100, label: cv + '%(自由)', color: '#9333ea' });
+  }
+  rates.sort((a, b) => a.r - b.r);
+  return rates;
+}
+let lastResults = null;
+let lastParams = null;
+
+function addChild(age) {
+  const div = document.createElement('div');
+  div.className = 'child-row';
+  div.innerHTML = `
+    <label class="field"><b>年齢</b><input type="number" class="c-age" value="${age ?? 5}"></label>
+    <label class="field"><b>小学校</b><select class="c-elem"><option value="pub">公立</option><option value="pri">私立</option></select></label>
+    <label class="field"><b>中学校</b><select class="c-jhs"><option value="pub">公立</option><option value="pri">私立</option></select></label>
+    <label class="field"><b>高校</b><select class="c-hs"><option value="pub">公立</option><option value="pri">私立</option></select></label>
+    <label class="field wide"><b>大学</b><select class="c-uni">
+      <option value="natl">国公立</option>
+      <option value="priBun" selected>私立文系</option>
+      <option value="priRi">私立理系</option>
+      <option value="none">進学しない</option>
+    </select></label>
+    <label class="field" style="width:auto"><b>下宿(自宅外)</b><input type="checkbox" class="c-away" style="width:20px;height:20px"></label>
+    <button class="btn-del" onclick="this.parentElement.remove()">削除</button>`;
+  document.getElementById('children').appendChild(div);
+}
+
+function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+
+function readParams() {
+  const spouseRaw = document.getElementById('spouseAge').value;
+  const children = [...document.querySelectorAll('.child-row')].map(row => ({
+    age: parseFloat(row.querySelector('.c-age').value) || 0,
+    elem: row.querySelector('.c-elem').value,
+    jhs: row.querySelector('.c-jhs').value,
+    hs: row.querySelector('.c-hs').value,
+    uni: row.querySelector('.c-uni').value,
+    away: row.querySelector('.c-away').checked
+  }));
+  return {
+    selfAge: num('selfAge'),
+    spouseAge: spouseRaw === '' ? null : parseFloat(spouseRaw),
+    lifeEnd: num('lifeEnd'),
+    incomeAnnual: num('incomeAnnual'),
+    incomeGrowth: num('incomeGrowth') / 100,
+    savings: num('savings'),
+    retirementBonus: num('retirementBonus'),
+    postFireIncome: num('postFireIncome'),
+    livingMonthly: num('livingMonthly'),
+    otherAnnual: num('otherAnnual'),
+    postFireRatio: num('postFireRatio') / 100,
+    inflation: num('inflation') / 100,
+    pensionSelf: num('pensionSelf'),
+    pensionSpouse: num('pensionSpouse'),
+    pensionStart: num('pensionStart'),
+    startWorkAge: num('startWorkAge'),
+    pensionAdjust: document.getElementById('pensionAdjust').checked,
+    crashRate: num('crashRate') / 100,
+    socialInsurance: num('socialInsurance'),
+    children
+  };
+}
+
+function fmt(man) {
+  if (man >= 10000) return (man / 10000).toFixed(2) + '億円';
+  return Math.round(man).toLocaleString() + '万円';
+}
+
+function calc() {
+  const p = readParams();
+  lastParams = p;
+  lastResults = buildRates().map(rate => {
+    const normal = findFireAge(p, rate.r, false);
+    const stress = findFireAge(p, rate.r, true);
+    return { ...rate, ...normal, stressFireAge: stress.fireAge };
+  });
+  renderCompare(p);
+  drawChart(p);
+  const i7 = lastResults.findIndex(x => Math.abs(x.r - 0.07) < 1e-9);
+  renderDetail(i7 >= 0 ? i7 : 0); // 7%タブを初期表示
+  document.getElementById('resultArea').style.display = 'block';
+  document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderCompare(p) {
+  const crashPct = Math.round(p.crashRate * 100);
+  let html = `<tr><th>想定リターン(年)</th><th>FIRE可能年齢</th><th>あと何年</th><th>FIREした年の年末資産</th><th>65歳時点の資産</th><th>暴落テスト⚡<br>(FIRE年に-${crashPct}%でも安全な年齢)</th></tr>`;
+  for (const res of lastResults) {
+    const tag = `<span class="rate-tag" style="background:${res.color}">${res.label}</span>`;
+    if (res.fireAge === null) {
+      html += `<tr><td>${tag}</td><td colspan="5" class="ng">${p.lifeEnd}歳まで働いても資産が枯渇する見込み(支出の見直しが必要)</td></tr>`;
+    } else {
+      const fireRow = res.rows.find(x => x.age === res.fireAge);
+      const at65 = res.rows.find(x => x.age === 65);
+      const years = res.fireAge - p.selfAge;
+      let stress;
+      if (res.stressFireAge === null) stress = `<span class="ng">不可</span>`;
+      else if (res.stressFireAge === res.fireAge) stress = `${res.stressFireAge}歳(同じ)`;
+      else stress = `${res.stressFireAge}歳(+${res.stressFireAge - res.fireAge}年)`;
+      html += `<tr><td>${tag}</td>
+        <td class="big">${res.fireAge}歳</td>
+        <td>${years === 0 ? '今すぐ可能!' : years + '年後'}</td>
+        <td>${fireRow ? fmt(fireRow.assets) : '—'}</td>
+        <td>${at65 ? fmt(at65.assets) : '—'}</td>
+        <td>${stress}</td></tr>`;
+    }
+  }
+  document.getElementById('compareTable').innerHTML = html;
+}
+
+function drawChart(p) {
+  const cv = document.getElementById('chart');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const L = 70, R = 20, T = 20, B = 40;
+  const W = cv.width - L - R, H = cv.height - T - B;
+  let maxY = 0;
+  for (const res of lastResults) for (const row of res.rows) maxY = Math.max(maxY, row.assets);
+  if (maxY <= 0) maxY = 1000;
+  maxY *= 1.08;
+  const x = age => L + (age - p.selfAge) / (p.lifeEnd - p.selfAge) * W;
+  const y = v => T + H - (v / maxY) * H;
+
+  // グリッドと軸
+  ctx.strokeStyle = '#e2e8f0'; ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 5; i++) {
+    const v = maxY / 5 * i;
+    ctx.beginPath(); ctx.moveTo(L, y(v)); ctx.lineTo(L + W, y(v)); ctx.stroke();
+    ctx.fillText(v >= 10000 ? (v / 10000).toFixed(1) + '億' : Math.round(v).toLocaleString() + '万', L - 6, y(v) + 4);
+  }
+  ctx.textAlign = 'center';
+  for (let age = Math.ceil(p.selfAge / 5) * 5; age <= p.lifeEnd; age += 5) {
+    ctx.fillText(age + '歳', x(age), T + H + 18);
+  }
+
+  // 各シナリオの線
+  for (const res of lastResults) {
+    ctx.strokeStyle = res.color; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x(p.selfAge), y(Math.max(0, p.savings)));
+    for (const row of res.rows) ctx.lineTo(x(row.age), y(Math.max(0, row.assets)));
+    ctx.stroke();
+    if (res.fireAge !== null) {
+      const fr = res.rows.find(r2 => r2.age === res.fireAge);
+      if (fr) {
+        ctx.fillStyle = res.color;
+        ctx.beginPath(); ctx.arc(x(fr.age), y(fr.assets), 5, 0, Math.PI * 2); ctx.fill();
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(`${res.label}: ${res.fireAge}歳でFIRE`, x(fr.age), y(fr.assets) - 12);
+        ctx.font = '11px sans-serif';
+      }
+    }
+  }
+  ctx.lineWidth = 1;
+}
+
+function renderDetail(idx) {
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = '';
+  lastResults.forEach((res, i) => {
+    const b = document.createElement('button');
+    b.textContent = 'リターン' + res.label;
+    b.className = i === idx ? 'on' : '';
+    b.onclick = () => renderDetail(i);
+    tabs.appendChild(b);
+  });
+  const res = lastResults[idx];
+  let html = `<tr><th>年齢</th><th>収入(手取)</th><th>年金</th><th>支出合計</th><th>うち教育費</th><th>年末の資産</th></tr>`;
+  for (const row of res.rows) {
+    const cls = row.age === res.fireAge ? ' class="fire-row"' : '';
+    html += `<tr${cls}><td>${row.age}歳${row.age === res.fireAge ? ' 🔥' : ''}</td>
+      <td>${fmt(row.income)}</td><td>${fmt(row.pension)}</td>
+      <td>${fmt(row.expenses)}</td><td>${fmt(row.edu)}</td>
+      <td${row.assets < 0 ? ' class="ng"' : ''}>${fmt(row.assets)}</td></tr>`;
+  }
+  document.getElementById('detailTable').innerHTML = html;
+}
+
+addChild(5);
+window.addChild = addChild;
+window.calc = calc;
+}
+</script>
+</body>
+</html>
